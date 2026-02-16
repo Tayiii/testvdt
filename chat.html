@@ -85,7 +85,14 @@
   box-sizing: border-box;
   flex: 0 0 auto;
   z-index: 2;
-  padding-top: calc(12px + env(safe-area-inset-top));
+  padding-top: 12px;
+}
+
+/* safe-area только для мобильных */
+@media (max-width: 600px) {
+  #chat-header {
+    padding-top: calc(12px + env(safe-area-inset-top));
+  }
 }
 
 #chat-title {
