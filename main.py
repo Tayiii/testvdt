@@ -787,25 +787,25 @@ def chat(data: ChatIn, request: Request):
         text = g_stripped
 
 
-# Тарифы: если пользователь спрашивает о цене/тарифах — показываем варианты
-if is_tariff_query(text):
-    tariff_quick = build_tariff_quick(text)
+    # Тарифы: если пользователь спрашивает о цене/тарифах — показываем варианты
+    if is_tariff_query(text):
+        tariff_quick = build_tariff_quick(text)
 
-    # Если удалось однозначно определить один вариант — отвечаем сразу
-    if len(tariff_quick) == 1:
-        only_payload = tariff_quick[0].get("payload", "")
-        if only_payload.startswith("faq:"):
-            fid = only_payload.split(":", 1)[1]
-            item = faq_by_id(faq, fid)
-            if item:
-                return {"answer": item.get("answer", ""), "quickReplies": [], "quickTitle": ""}
+        # Если удалось однозначно определить один вариант — отвечаем сразу
+        if len(tariff_quick) == 1:
+            only_payload = tariff_quick[0].get("payload", "")
+            if only_payload.startswith("faq:"):
+                fid = only_payload.split(":", 1)[1]
+                item = faq_by_id(faq, fid)
+                if item:
+                    return {"answer": item.get("answer", ""), "quickReplies": [], "quickTitle": ""}
 
-    return {
-        "answer": "Уточните, пожалуйста, какой тариф нужен:",
-        "quickTitle": "Тарифы",
-        "quickReplies": tariff_quick,
-        "navPush": True
-    }    # Exact title match
+        return {
+            "answer": "Уточните, пожалуйста, какой тариф нужен:",
+            "quickTitle": "Тарифы",
+            "quickReplies": tariff_quick,
+            "navPush": True
+        }    # Exact title match
     for it in faq:
         if normalize_ru(it.get("title", "")) == normalize_ru(text):
             return {"answer": it.get("answer", ""), "quickReplies": [], "quickTitle": ""}
