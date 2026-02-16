@@ -139,7 +139,11 @@
     right: 20px !important;
     bottom: 100px !important;
     width: 380px !important;
-    height: 560px !important;
+
+    /* чтобы окно никогда не вылезало за верх экрана (актуально при разных DPI/масштабах мониторов) */
+    height: min(560px, calc(100vh - 140px)) !important;
+    min-height: 360px !important;
+
     border-radius: 15px !important;
   }
 }
