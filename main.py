@@ -5,6 +5,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from pathlib import Path
 import json
+import re
 from typing import Optional, List, Dict, Any, Tuple
 
 app = FastAPI()
@@ -212,80 +213,95 @@ def faq_by_id(faq: List[Dict[str, Any]], fid: str) -> Optional[Dict[str, Any]]:
     return None
 
 
-CATEGORIES = [
+CATEGORY_BLUEPRINT = [
     {
         "key": "lk",
-        "title": "Личный кабинет",
+        "title": "Личный кабинет и показания",
         "items": [
-            {"title": "Вход в личный кабинет", "payload": "faq:lk"},
-            {"title": "Передача показаний через личный кабинет", "payload": "faq:meters"},
-            {"title": "Получение квитанции в электронном виде", "payload": "faq:electronic_receipt"},
-        ],
-    },
-    {
-        "key": "readings",
-        "title": "Показания счетчиков",
-        "items": [
-            {"title": "Как передать показания", "payload": "faq:meters"},
-            {"title": "Не принимаются показания (истёк срок поверки)", "payload": "faq:cannot_submit_readings"},
-            {"title": "Откуда образовалась задолженность", "payload": "faq:debt_no_readings"},
+            "lk",
+            "meters",
+            "electronic_receipt",
+            "cannot_submit_readings",
+            "debt_no_readings",
         ],
     },
     {
         "key": "payments",
-        "title": "Оплата и квитанции",
+        "title": "Оплата и начисления",
         "items": [
-            {"title": "Способы оплаты услуг", "payload": "faq:payment_methods"},
-            {"title": "Реквизиты для оплаты", "payload": "faq:payment_details"},
-            {"title": "Оплата произведена, но отображается долг", "payload": "faq:payment_not_applied"},
-            {"title": "Расшифровка начислений", "payload": "faq:charges_explanation"},
-            {"title": "Почему сильно выросла оплата за воду", "payload": "faq:water_bill_increased_no_meter"},
+            "payment_methods",
+            "payment_details",
+            "payment_not_applied",
+            "water_bill_increased_no_meter",
         ],
     },
     {
         "key": "meters",
-        "title": "Приборы учета (поверка/пломбы)",
+        "title": "Приборы учёта и документы",
         "items": [
-            {"title": "Кто выполняет поверку счетчика", "payload": "faq:meter_verification_service"},
-            {"title": "Распломбировка прибора учета", "payload": "faq:unseal_meter"},
-            {"title": "Опломбировка прибора учета", "payload": "faq:seal_meter"},
-            {"title": "Какие документы нужно принести", "payload": "faq:documents_required"},
+            "meter_verification_service",
+            "unseal_meter",
+            "seal_meter",
+            "documents_required",
         ],
     },
     {
         "key": "reception",
-        "title": "Обращения и приём",
+        "title": "Приём граждан и обращения",
         "items": [
-            {"title": "График работы абонентского отдела", "payload": "faq:grafik_abonotd"},
-            {"title": "Загруженность отдела сбыта", "payload": "faq:queue_load_time"},
-            {"title": "Переоформление лицевого счета", "payload": "faq:pereof_lschet_flat"},
-            {"title": "Изменение количества зарегистрированных", "payload": "faq:izmen_kolvo_grazhdan"},
+            "grafik_abonotd",
+            "queue_load_time",
+            "sales_office_address",
+            "pereof_lschet_flat",
+            "izmen_kolvo_grazhdan",
         ],
     },
     {
         "key": "emergency",
-        "title": "Аварии и отключения",
+        "title": "Аварии и контакты",
         "items": [
-            {"title": "Отсутствие воды / отключение", "payload": "faq:no_water"},
-            {"title": "Контакты и аварийная служба", "payload": "faq:contacts"},
+            "no_water",
+            "contacts",
         ],
-    }
+    },
+    {
+        "key": "tariffs",
+        "title": "Тарифы",
+        "items": [
+            "tariffs_population_taganrog_2026",
+        ],
+    },
+]
 
-,
-{
-    "key": "tariffs",
-    "title": "Тарифы",
-    "items": [
-        {"title": "Все тарифы (списком)", "payload": "faq:tariffs_all_2026_0101_0930"},
-        {"title": "Население г. Таганрога (с НДС)", "payload": "faq:tariffs_population_taganrog_2026"},
-        {"title": "Население Новобессергеневского с/п (с НДС)", "payload": "faq:tariffs_population_novobessergenevskoe_2026"},
-        {"title": "Население Мясниковского и Неклиновского районов: тех. вода (с НДС)", "payload": "faq:tariffs_population_myasnikov_neklin_tech_2026"},
-        {"title": "Юрлица (прочие потребители) (без НДС)", "payload": "faq:tariffs_legal_entities_general_2026"},
-        {"title": "Юрлица для населения г. Таганрога (без НДС)", "payload": "faq:tariffs_legal_entities_for_population_taganrog_2026"},
-        {"title": "Юрлица для населения Новобессергеневского с/п (без НДС)", "payload": "faq:tariffs_legal_entities_for_population_novobessergenevskoe_2026"},
-        {"title": "Юрлица для населения Мясниковского и Неклиновского районов: тех. вода (без НДС)", "payload": "faq:tariffs_legal_entities_for_population_myasnikov_neklin_tech_2026"},
-    ],
-}]
+
+def build_categories(faq: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    faq_map = {str(it.get("id")): it for it in faq if it.get("id")}
+    categories: List[Dict[str, Any]] = []
+
+    for category in CATEGORY_BLUEPRINT:
+        quick_items: List[Dict[str, str]] = []
+        for fid in category.get("items", []):
+            item = faq_map.get(fid)
+            if not item:
+                continue
+            quick_items.append({
+                "title": str(item.get("title") or fid),
+                "payload": f"faq:{fid}",
+            })
+
+        if quick_items:
+            categories.append({
+                "key": category["key"],
+                "title": category["title"],
+                "items": quick_items,
+            })
+
+    return categories
+
+
+def build_category_root_quick(categories: List[Dict[str, Any]]) -> List[Dict[str, str]]:
+    return [{"title": c["title"], "payload": f"category:{c['key']}"} for c in categories]
+
 
 
 @app.get("/")
@@ -367,63 +383,46 @@ def is_tariff_query(text: str) -> bool:
 
 
 def build_tariff_quick(text: str) -> List[Dict[str, str]]:
-    t = normalize_ru(text)
-    tokens = set(tokenize(t))
+    return [{
+        "title": "Тарифы для населения г. Таганрога (с НДС)",
+        "payload": "faq:tariffs_population_taganrog_2026",
+    }]
 
-    # Признаки "юрлица"
-    is_legal = ("юрид" in t) or ("юрлиц" in t) or ("юрлица" in t) or ("юр" in tokens) or ("без ндс" in t)
 
-    # Локации/группы
-    is_taganrog = ("таганрог" in t)
-    is_novo = ("новобессергенев" in t)
-    is_neklin = ("неклинов" in t)
-    is_myas = ("мясников" in t)
+LK_LOGIN_URL = "https://lk.tgnvoda.ru/login"
+LK_LOGIN_LINK = f'<a href="{LK_LOGIN_URL}" target="_blank" rel="noopener noreferrer">личный кабинет</a>'
+LK_CASE_LINKS = {
+    "личный кабинет": f'<a href="{LK_LOGIN_URL}" target="_blank" rel="noopener noreferrer">личный кабинет</a>',
+    "личном кабинете": f'<a href="{LK_LOGIN_URL}" target="_blank" rel="noopener noreferrer">личном кабинете</a>',
+    "личного кабинета": f'<a href="{LK_LOGIN_URL}" target="_blank" rel="noopener noreferrer">личного кабинета</a>',
+    "личному кабинету": f'<a href="{LK_LOGIN_URL}" target="_blank" rel="noopener noreferrer">личному кабинету</a>',
+    "личным кабинетом": f'<a href="{LK_LOGIN_URL}" target="_blank" rel="noopener noreferrer">личным кабинетом</a>',
+    "личные кабинеты": f'<a href="{LK_LOGIN_URL}" target="_blank" rel="noopener noreferrer">личные кабинеты</a>',
+}
 
-    # Тип воды
-    is_tech = ("техничес" in t) or ("тех" in tokens)
 
-    # Чем конкретнее запрос, тем меньше кнопок:
-    # 1) Если явно определился ровно один вариант — вернём одну кнопку (а в chat() можно сразу ответить).
-    # 2) Если определилось направление — вернём 2–3 наиболее подходящих.
-    quick: List[Dict[str, str]] = []
+def inject_lk_links(text: str) -> str:
+    if not text:
+        return text
+    if "lk.tgnvoda.ru/login" in text:
+        return text
 
-    if is_legal:
-        if is_taganrog:
-            quick.append({"title": "Юрлица для населения г. Таганрога (без НДС)", "payload": "faq:tariffs_legal_entities_for_population_taganrog_2026"})
-            return quick
-        if is_novo:
-            quick.append({"title": "Юрлица для населения Новобессергеневского с/п (без НДС)", "payload": "faq:tariffs_legal_entities_for_population_novobessergenevskoe_2026"})
-            return quick
-        if (is_neklin or is_myas) or is_tech:
-            quick.append({"title": "Юрлица для населения Мясниковского и Неклиновского районов: тех. вода (без НДС)", "payload": "faq:tariffs_legal_entities_for_population_myasnikov_neklin_tech_2026"})
-            return quick
+    pattern = re.compile(r"(?i)личн(?:ый кабинет|ом кабинете|ого кабинета|ому кабинету|ым кабинетом|ые кабинеты)")
 
-        # Юрлица без уточнения — 2 кнопки: общий + список
-        quick.append({"title": "Юрлица (прочие потребители) (без НДС)", "payload": "faq:tariffs_legal_entities_general_2026"})
-        quick.append({"title": "Все тарифы (списком)", "payload": "faq:tariffs_all_2026_0101_0930"})
-        return quick
+    def repl(match: re.Match) -> str:
+        original = match.group(0)
+        repl_value = LK_CASE_LINKS.get(original.lower())
+        if not repl_value:
+            return original
+        if original[:1].isupper():
+            repl_value = repl_value.replace(">лич", ">Лич", 1)
+        return repl_value
 
-    # Население
-    if is_taganrog:
-        quick.append({"title": "Население г. Таганрога (с НДС)", "payload": "faq:tariffs_population_taganrog_2026"})
-        return quick
-    if is_novo:
-        quick.append({"title": "Население Новобессергеневского с/п (с НДС)", "payload": "faq:tariffs_population_novobessergenevskoe_2026"})
-        return quick
-    if (is_neklin or is_myas) or is_tech:
-        quick.append({"title": "Население Мясниковского и Неклиновского районов: тех. вода (с НДС)", "payload": "faq:tariffs_population_myasnikov_neklin_tech_2026"})
-        return quick
+    return pattern.sub(repl, text)
 
-    # Общий вопрос о цене/тарифах — показываем полный набор (без лишнего "основания")
-    quick.append({"title": "Все тарифы (списком)", "payload": "faq:tariffs_all_2026_0101_0930"})
-    quick.append({"title": "Население г. Таганрога (с НДС)", "payload": "faq:tariffs_population_taganrog_2026"})
-    quick.append({"title": "Население Новобессергеневского с/п (с НДС)", "payload": "faq:tariffs_population_novobessergenevskoe_2026"})
-    quick.append({"title": "Население Мясниковского и Неклиновского районов: тех. вода (с НДС)", "payload": "faq:tariffs_population_myasnikov_neklin_tech_2026"})
-    quick.append({"title": "Юрлица (прочие потребители) (без НДС)", "payload": "faq:tariffs_legal_entities_general_2026"})
-    quick.append({"title": "Юрлица для населения г. Таганрога (без НДС)", "payload": "faq:tariffs_legal_entities_for_population_taganrog_2026"})
-    quick.append({"title": "Юрлица для населения Новобессергеневского с/п (без НДС)", "payload": "faq:tariffs_legal_entities_for_population_novobessergenevskoe_2026"})
-    quick.append({"title": "Юрлица для населения Мясниковского и Неклиновского районов: тех. вода (без НДС)", "payload": "faq:tariffs_legal_entities_for_population_myasnikov_neklin_tech_2026"})
-    return quick
+
+def format_answer(text: str) -> str:
+    return inject_lk_links(text or "")
 
 
 # ----------------------------
@@ -574,6 +573,7 @@ def _help_admin() -> str:
 @app.post("/api/chat")
 def chat(data: ChatIn, request: Request):
     faq = load_faq()
+    categories = build_categories(faq)
 
     payload = (data.payload or "").strip()
     text = (data.message or "").strip()
@@ -581,14 +581,14 @@ def chat(data: ChatIn, request: Request):
     # 1) payload from buttons
     if payload:
         if payload == "category:__root__":
-            quick = [{"title": c["title"], "payload": f"category:{c['key']}"} for c in CATEGORIES]
+            quick = build_category_root_quick(categories)
             return {"answer": "Выберите категорию:", "quickTitle": "Категории", "quickReplies": quick, "navPush": False}
 
         if payload.startswith("category:"):
             key = payload.split(":", 1)[1]
-            cat = next((c for c in CATEGORIES if c["key"] == key), None)
+            cat = next((c for c in categories if c["key"] == key), None)
             if not cat:
-                quick = [{"title": c["title"], "payload": f"category:{c['key']}"} for c in CATEGORIES]
+                quick = build_category_root_quick(categories)
                 return {"answer": "Категория не найдена. Выберите категорию:", "quickTitle": "Категории", "quickReplies": quick, "navPush": False}
             return {
                 "answer": f"{cat['title']}. Выберите уточняющий вопрос:",
@@ -602,14 +602,14 @@ def chat(data: ChatIn, request: Request):
             item = faq_by_id(faq, fid)
             if not item:
                 return {"answer": "Ответ по выбранному пункту не найден в базе FAQ.", "quickReplies": [], "quickTitle": ""}
-            return {"answer": item.get("answer", ""), "quickReplies": [], "quickTitle": ""}
+            return {"answer": format_answer(item.get("answer", "")), "quickReplies": [], "quickTitle": ""}
 
         # Otherwise treat payload as text query
         text = payload
 
     # 2) Normal text input
     if not text:
-        quick = [{"title": c["title"], "payload": f"category:{c['key']}"} for c in CATEGORIES]
+        quick = build_category_root_quick(categories)
         return {"answer": "Пожалуйста, выберите категорию или напишите вопрос.", "quickTitle": "Категории", "quickReplies": quick, "navPush": False}
 
     # ----------------------------
@@ -777,7 +777,7 @@ def chat(data: ChatIn, request: Request):
     g_stripped = strip_greeting_prefix(text)
     if g_stripped != normalize_ru(text):
         if len(tokenize(g_stripped)) == 0:
-            quick = [{"title": c["title"], "payload": f"category:{c['key']}"} for c in CATEGORIES]
+            quick = build_category_root_quick(categories)
             return {
                 "answer": "Здравствуйте. Выберите категорию вопросов или напишите ваш вопрос.",
                 "quickTitle": "Категории",
@@ -798,7 +798,7 @@ def chat(data: ChatIn, request: Request):
                 fid = only_payload.split(":", 1)[1]
                 item = faq_by_id(faq, fid)
                 if item:
-                    return {"answer": item.get("answer", ""), "quickReplies": [], "quickTitle": ""}
+                    return {"answer": format_answer(item.get("answer", "")), "quickReplies": [], "quickTitle": ""}
 
         return {
             "answer": "Уточните, пожалуйста, какой тариф нужен:",
@@ -808,7 +808,7 @@ def chat(data: ChatIn, request: Request):
         }    # Exact title match
     for it in faq:
         if normalize_ru(it.get("title", "")) == normalize_ru(text):
-            return {"answer": it.get("answer", ""), "quickReplies": [], "quickTitle": ""}
+            return {"answer": format_answer(it.get("answer", "")), "quickReplies": [], "quickTitle": ""}
 
     tok_count = len(tokenize(text))
     if tok_count <= 4:
@@ -821,7 +821,7 @@ def chat(data: ChatIn, request: Request):
     if res.get("ok"):
         best = res["best"]["item"]
         best_id = best.get("id")
-        answer = best.get("answer", "")
+        answer = format_answer(best.get("answer", ""))
         suggestions = build_suggestions(res.get("candidates") or [], best_id, limit=3)
 
         if suggestions:
@@ -850,5 +850,5 @@ def chat(data: ChatIn, request: Request):
             "navPush": True
         }
 
-    quick = [{"title": c["title"], "payload": f"category:{c['key']}"} for c in CATEGORIES]
+    quick = build_category_root_quick(categories)
     return {"answer": "Не удалось подобрать точный ответ. Выберите категорию или уточните вопрос.", "quickTitle": "Категории", "quickReplies": quick, "navPush": False}
